@@ -17,8 +17,7 @@ public class ExprTyper : Visitor<NType> {
    public override NType Visit (NIdentifier identifier) =>
       identifier.Type = mSymbols[identifier.Name.Text];
 
-   public override NType Visit (NUnary unary)
-      => unary.Type = unary.Expr.Accept (this);
+   public override NType Visit (NUnary unary) => unary.Type = unary.Expr.Accept (this);
 
    public override NType Visit (NBinary binary) {
       NType a = binary.Left.Accept (this), b = binary.Right.Accept (this);
