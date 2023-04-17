@@ -39,7 +39,7 @@ public class Token {
    public void PrintError () {
       if (Kind != ERROR) throw new Exception ("PrintError called on a non-error token");
       Console.WriteLine ($"File: {Source.FileName}");
-      Console.WriteLine ("────┬─────────────");
+      Console.WriteLine ($"────┬─{new string ('─', Source.FileName.Length)}");
       for (int i = Math.Max (1, Line - 2); i <= Line + 2; i++) {
          if (i > Source.Lines.Length) break;
          Console.WriteLine ($"{i,4}│{Source.Lines[i - 1]}");
