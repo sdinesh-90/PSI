@@ -25,4 +25,9 @@ public class ExprEvaluator : Visitor<int> {
          _ => throw new NotImplementedException ()
       };
    }
+
+   public override int Visit (NFnCall funccall) {
+      int[] args = funccall.Params.Select (a => a.Accept (this)).ToArray ();
+      throw new NotImplementedException ();
+   }
 }
