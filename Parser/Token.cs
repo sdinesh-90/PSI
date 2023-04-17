@@ -42,7 +42,7 @@ public class Token {
       Console.WriteLine ("────┬─────────────");
       for (int i = Math.Max (1, Line - 2); i <= Line + 2; i++) {
          if (i > Source.Lines.Length) break;
-         OutL (i);
+         Console.WriteLine ($"{i,4}│{Source.Lines[i - 1]}");
          if (i == Line) {
             Console.ForegroundColor = ConsoleColor.Yellow;
             int colNo = 4 + Column;
@@ -53,8 +53,6 @@ public class Token {
             Console.ResetColor ();
          }
       }
-
-      void OutL (int lineNo) => Console.WriteLine ($"{lineNo, 4}│{Source.Lines[lineNo - 1]}");
    }
 
    // Helper used by the parser (maps operator sequences to E values)
