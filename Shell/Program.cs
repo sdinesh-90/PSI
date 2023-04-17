@@ -1,9 +1,11 @@
 ﻿using PSI;
 using PSI.Ops;
 using System.Diagnostics;
+using System.Text;
 
 static class Start {
    static void Main () {
+      Console.OutputEncoding = Encoding.UTF8;
       Test1 ();      // Test ExprEval and ExprILGen
       Test2 ();      // Test ExprTyper and ExprGrapher
       Test3 ();      // Type checks on various expressions
