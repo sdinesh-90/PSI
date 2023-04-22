@@ -20,7 +20,7 @@ public class PSIPrint : Visitor<StringBuilder> {
             NWrite ($"{g.Select (a => a.Name).ToCSV ()} : {g.Key};");
          N--;
       }
-      return S;
+      return Visit (d.FnProcVars);
    }
 
    public override StringBuilder Visit (NVarDecl d)
@@ -64,6 +64,87 @@ public class PSIPrint : Visitor<StringBuilder> {
          if (i > 0) Write (", "); f.Params[i].Accept (this);
       }
       return Write (")");
+   }
+
+   // procedure Greeter (msg: string);
+   // var
+   //    name: string;
+   // begin
+   //    write ("Enter your name: ");
+   //    read (name);
+   //    write ("Hello, ", name, ". ", msg);
+   // end
+   public override StringBuilder Visit (NFnDecl d) {
+      bool proc = d.Type is NType.Void;
+      NWrite ($"{(proc ? "procedure" : "function")} {d.Name} (");
+      bool first = true;
+      foreach (var group in d.Params.GroupBy (a => a.Type)) {
+         if (!first) Write ("; "); first = false;
+         Write ($"{group.Select (a => a.Name).ToCSV ()} : {group.Key}");
+      }
+      Write ($"){(proc ? "" : $" : {d.Type}")};");
+      return Visit (d.Block);
+   }
+
+   // read (name, age);
+   public override StringBuilder Visit (NReadStmt r)
+      => NWrite ($"read ({r.Vars.ToCSV ()});");
+
+   // Fibo ();
+   // Fibo (1, 2);
+   public override StringBuilder Visit (NCallStmt c) {
+      NWrite ($"{c.FuncName} (");
+      for (int i = 0; i < c.Arguments.Length; i++) {
+         if (i > 0) Write (", ");
+         Visit (c.Arguments[i]);
+      }
+      return Write (");");
+   }
+
+   // for i := 1 to 20 do 
+   //    a := a + b;
+   public override StringBuilder Visit (NForStmt f) {
+      NWrite ($"for {f.Name} := ");
+      Visit (f.FromExpr);
+      Write ($" {(f.Down ? "downto" : "to")} ");
+      Visit (f.ToExpr); Write (" do"); N++;
+      Visit (f.Stmt); N--;
+      return S;
+   }
+
+   // if i < 12 then
+   //    i := 12;
+   // else 
+   //    j := 13;
+   public override StringBuilder Visit (NIFElseStmt i) {
+      NWrite ("if "); Visit (i.Condition); Write (" then"); N++;
+      Visit (i.ThenStmt); N--;
+      if (i.ElseStmt != null) {
+         NWrite ("else"); N++;
+         Visit (i.ElseStmt); N--;
+      }
+      return S;
+   }
+
+   // repeat 
+   //    writeln ("Hello");
+   //    j := j - 1;
+   // until j <= 0;
+   public override StringBuilder Visit (NRepeatStmt r) {
+      NWrite ("repeat"); N++;
+      Visit (r.Stmts); N--;
+      NWrite ($"until ");
+      return Visit (r.Condition);
+   }
+
+   // while j < 20 do begin
+   //    k := k + j;
+   //    j := j - 1;
+   // end;
+   public override StringBuilder Visit (NWhileStmt w) {
+      NWrite ("while "); Visit (w.Condition); Write (" do"); N++;
+      Visit (w.Stmt); N--;
+      return S;
    }
 
    StringBuilder Visit (params Node[] nodes) {

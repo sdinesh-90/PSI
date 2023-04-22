@@ -33,7 +33,7 @@ public class Parser {
       List<NVarDecl> vars = new ();
       if (Match (VAR)) 
          do { vars.AddRange (VarDecls ()); Expect (SEMI); } while (Peek (IDENT));
-      return new (vars.ToArray ());
+      return new (vars.ToArray (), ProcFnDecls ());
    }
 
    // ident-list = IDENT { "," IDENT }
@@ -49,6 +49,44 @@ public class Parser {
       return names.Select (a => new NVarDecl (a, type)).ToArray ();
    }
 
+   // { proc-decl | func-decl }
+   NFnDecl[] ProcFnDecls () {
+      var list = new List<NFnDecl> ();
+      while (true) {
+         if (Peek (PROCEDURE)) list.Add (ProcDecl ());
+         else if (Peek (FUNCTION)) list.Add (FuncDecl ());
+         else break;
+      }
+      return list.ToArray ();
+   }
+
+   // "procedure" IDENT paramlist; block ";" .
+   NFnDecl ProcDecl () {
+      Expect (PROCEDURE); var name = Expect (IDENT);
+      var declar = ParamList (); Expect (SEMI);
+      var block = Block (); Expect (SEMI);
+      return new NFnDecl (name, Void, declar, block);
+   }
+
+   // "function" IDENT paramlist ":" type; block ";" .
+   NFnDecl FuncDecl () {
+      Expect (FUNCTION); var name = Expect (IDENT);
+      var ps = ParamList (); Expect (COLON);
+      var type = Type (); Expect (SEMI);
+      var block = Block (); Expect (SEMI);
+      return new NFnDecl (name, type, ps, block);
+   }
+
+   // "(" [ var-decl { ";" var-decl } ] ")" .
+   NVarDecl[] ParamList () {
+      List<NVarDecl> vars = new ();
+      Expect (OPEN);
+      if (!Peek (CLOSE))
+         do { vars.AddRange (VarDecls ()); } while (Match (SEMI));
+      Expect (CLOSE);
+      return vars.ToArray ();
+   }
+
    // type = integer | real | boolean | string | char
    NType Type () {
       var token = Expect (INTEGER, REAL, BOOLEAN, STRING, CHAR);
@@ -60,14 +98,23 @@ public class Parser {
    #endregion
    
    #region Statements ---------------------------------------
-   // statement         =  write-stmt | read-stmt | assign-stmt | call-stmt |
+   // statement         =  ( write-stmt | read-stmt | assign-stmt | call-stmt |
    //                      goto-stmt | if-stmt | while-stmt | repeat-stmt |
-   //                      compound-stmt | for-stmt | case-stmt
+   //                      compound-stmt | for-stmt | case-stmt ) [ ";" ]
    NStmt Stmt () {
-      if (Match (WRITE, WRITELN)) return WriteStmt ();
-      if (Match (IDENT)) {
-         if (Match (ASSIGN)) return AssignStmt ();
-      }
+      try {
+         if (Match (WRITE, WRITELN)) return WriteStmt ();
+         if (Match (READ)) return ReadStmt ();
+         if (Match (IF)) return IFElseStmt ();
+         if (Match (WHILE)) return WhileStmt ();
+         if (Match (REPEAT)) return RepeatStmt ();
+         if (Match (FOR)) return ForStmt ();
+         if (Match (IDENT)) {
+            if (Match (ASSIGN)) return AssignStmt ();
+            if (Peek (OPEN)) return CallStmt ();
+         }
+         if (Peek (BEGIN)) return CompoundStmt ();
+      } finally { Match (SEMI); } // We may allow semi colon at the end of statement
       Unexpected ();
       return null!;
    }
@@ -87,6 +134,47 @@ public class Parser {
    // assign-stmt = IDENT ":=" expr .
    NAssignStmt AssignStmt () 
       => new (PrevPrev, Expression ());
+
+   // "read" "(" identlist ")" .
+   NReadStmt ReadStmt () {
+      Expect (OPEN); var idents = IdentList (); Expect (CLOSE);
+      return new (idents);
+   }
+
+   // call-stmt =  IDENT arglist .
+   NCallStmt CallStmt () => new (Prev, ArgList ());
+
+   // "if" expression "then" statement [ "else" statement ] .
+   NIFElseStmt IFElseStmt () {
+      var expr = Expression (); Expect (THEN);
+      var ifStmt = Stmt (); Match (SEMI);
+      NStmt? elseStmt = Match (ELSE) ? Stmt () : null;
+      return new (expr, ifStmt, elseStmt);
+   }
+
+   // "while" expression "do" statement .
+   NWhileStmt WhileStmt () {
+      var cond = Expression (); Expect (DO);
+      return new (cond, Stmt ());
+   }
+
+   // "repeat" statement { ";" statement } "until" expression .
+   NRepeatStmt RepeatStmt () {
+      var stmts = new List<NStmt> { Stmt () };
+      // Handle special where statement consumes the semi colon at the end
+      while (Match (SEMI) || (Prev.Kind is SEMI && !Peek (UNTIL))) stmts.Add (Stmt ());
+      Expect (UNTIL);
+      return new (Expression (), stmts.ToArray ());
+   }
+
+   // "for" IDENT ":=" expression ( "to" | "downto" ) expression "do" statement .
+   NForStmt ForStmt () {
+      var name = Expect (IDENT); Expect (ASSIGN);
+      var fromExpr = Expression ();
+      bool down = Expect (TO, DOWNTO).Kind is DOWNTO;
+      var toExpr = Expression (); Expect (DO);
+      return new NForStmt (name, fromExpr, toExpr, down, Stmt ());
+   }
    #endregion
 
    #region Expression --------------------------------------
