@@ -41,6 +41,7 @@ public class TypeAnalyze : Visitor<NType> {
    public override NType Visit (NFnDecl f) {
       Check (f.Name);
       mSymbols.Funcs.Add (f);
+      if (f.Body != null) Visit (f.Body);
       return f.Return;
    }
    #endregion
@@ -52,10 +53,21 @@ public class TypeAnalyze : Visitor<NType> {
    }
 
    NType FindVariable (Token name) => mSymbols.Find (name.Text) switch {
-      NVarDecl v => v.Type,
+      NVarDecl v when v.Assigned => v.Type,
       NConstDecl c => c.Type,
+      NVarDecl => throw new ParseException (name, "Use of unassigned variable"),
       _ => throw new ParseException (name, "Unknown variable")
    };
+
+   void VisitParameters (Token fnName, NExpr[] parameters, NType[] paramTypes) {
+      if (parameters.Length != paramTypes.Length)
+         throw new ParseException (fnName, "Parameter mismatch");
+      for (int i = 0; i < parameters.Length; i++) {
+         NExpr param = parameters[i];
+         param.Accept (this);
+         parameters[i] = AddTypeCast (fnName, param, paramTypes[i]);
+      }
+   }
    #endregion
 
    #region Statements --------------------------------------
@@ -63,18 +75,12 @@ public class TypeAnalyze : Visitor<NType> {
       => Visit (b.Stmts);
 
    public override NType Visit (NAssignStmt a) {
-      NType type;
-      if (mSymbols.Find (a.Name.Text, false) is NFnDecl fn) {
-         if (fn.Return is Void) throw new ParseException (fn.Name, "Assigning value to Procedure");
-         type = fn.Return;
-      } else {
-         if (mSymbols.Find (a.Name.Text) is not NVarDecl v)
-            throw new ParseException (a.Name, "Unknown variable");
-         type = v.Type;
-      }
+      if (mSymbols.Find (a.Name.Text) is not NVarDecl v)
+         throw new ParseException (a.Name, "Unknown variable");
       a.Expr.Accept (this);
-      a.Expr = AddTypeCast (a.Name, a.Expr, type);
-      return type;
+      a.Expr = AddTypeCast (a.Name, a.Expr, v.Type);
+      v.Assigned = true;
+      return v.Type;
    }
    
    NExpr AddTypeCast (Token token, NExpr source, NType target) {
@@ -114,9 +120,10 @@ public class TypeAnalyze : Visitor<NType> {
    }
 
    public override NType Visit (NCallStmt c) {
-      if (mSymbols.Find (c.Name.Text) is not NFnDecl)
-         throw new ParseException (c.Name, "Unknown fucntion");
-      Visit (c.Params); return Void;
+      if (mSymbols.Find (c.Name.Text) is not NFnDecl fn)
+         throw new ParseException (c.Name, "Unknown function");
+      VisitParameters (c.Name, c.Params, fn.Params.Select (a => a.Type).ToArray ());
+      return Void;
    }
    #endregion
 
@@ -165,9 +172,9 @@ public class TypeAnalyze : Visitor<NType> {
       => d.Type = FindVariable (d.Name);
 
    public override NType Visit (NFnCall f) {
-      Visit (f.Params);
-      if (mSymbols.Find (f.Name.Text) is NFnDecl fn) return f.Type = fn.Return;
-      throw new ParseException (f.Name, "Unknown function");
+      if (mSymbols.Find (f.Name.Text) is not NFnDecl fn) throw new ParseException (f.Name, "Unknown function");
+      VisitParameters (f.Name, f.Params, fn.Params.Select (a => a.Type).ToArray ());
+      return f.Type = fn.Return;
    }
 
    public override NType Visit (NTypeCast c) {

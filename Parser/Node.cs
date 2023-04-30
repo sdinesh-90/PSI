@@ -27,12 +27,14 @@ public record NDeclarations (NConstDecl[] Consts, NVarDecl[] Vars, NFnDecl[] Fun
 // Declares a variable (with a type)
 public record NVarDecl (Token Name, NType Type) : Node {
    public override T Accept<T> (Visitor<T> visitor) => visitor.Visit (this);
+   public bool Assigned { get; set; }
    public override string ToString () => $"{Type} {Name}";
 }
 
 // Declares a function (or procedure) 
 public record NFnDecl (Token Name, NVarDecl[] Params, NType Return, NBlock? Body) : Node {
    public override T Accept<T> (Visitor<T> visitor) => visitor.Visit (this);
+   public bool Assigned { get; set; }
    public override string ToString () => $"{Return} {Name} ({Params.ToCSV ()})";
 }
 

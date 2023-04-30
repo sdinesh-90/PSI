@@ -1,18 +1,19 @@
 program Hello;
 const
  pi = 3.14;
+ i = 10;
 var
- pi3 : real;
-function pi2 () : real;
+ j : real;
+function func1 (scale: real ) : real;
     var
     pi : real;
     begin
-    pi := 2;
-    pi2 := 3;
+    pi := i;
     writeln (pi)
     end;
 begin
   writeln ("Hello World");
-  writeln (pi);
-  writeln (pi2 ())
+  j := 3.1;
+  writeln (j);
+  writeln (func1 (i))
 end.
