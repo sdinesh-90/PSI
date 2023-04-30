@@ -23,18 +23,39 @@ public class TypeAnalyze : Visitor<NType> {
    }
 
    public override NType Visit (NDeclarations d) {
-      Visit (d.Vars); return Visit (d.Funcs);
+      Visit (d.Consts); Visit (d.Vars); return Visit (d.Funcs);
+   }
+
+   public override NType Visit (NConstDecl c) {
+      Check (c.Name);
+      mSymbols.Consts.Add (c);
+      return Visit (c.Value);
    }
 
    public override NType Visit (NVarDecl d) {
+      Check (d.Name);
       mSymbols.Vars.Add (d);
       return d.Type;
    }
 
    public override NType Visit (NFnDecl f) {
+      Check (f.Name);
       mSymbols.Funcs.Add (f);
       return f.Return;
    }
+   #endregion
+
+   #region Implementation ----------------------------------
+   void Check (Token name) {
+      var s = mSymbols.Find (name.Text, false);
+      if (s != null) throw new ParseException (name, $"Duplicate identifier \"{name.Text}\"");
+   }
+
+   NType FindVariable (Token name) => mSymbols.Find (name.Text) switch {
+      NVarDecl v => v.Type,
+      NConstDecl c => c.Type,
+      _ => throw new ParseException (name, "Unknown variable")
+   };
    #endregion
 
    #region Statements --------------------------------------
@@ -42,11 +63,18 @@ public class TypeAnalyze : Visitor<NType> {
       => Visit (b.Stmts);
 
    public override NType Visit (NAssignStmt a) {
-      if (mSymbols.Find (a.Name.Text) is not NVarDecl v)
-         throw new ParseException (a.Name, "Unknown variable");
+      NType type;
+      if (mSymbols.Find (a.Name.Text, false) is NFnDecl fn) {
+         if (fn.Return is Void) throw new ParseException (fn.Name, "Assigning value to Procedure");
+         type = fn.Return;
+      } else {
+         if (mSymbols.Find (a.Name.Text) is not NVarDecl v)
+            throw new ParseException (a.Name, "Unknown variable");
+         type = v.Type;
+      }
       a.Expr.Accept (this);
-      a.Expr = AddTypeCast (a.Name, a.Expr, v.Type);
-      return v.Type;
+      a.Expr = AddTypeCast (a.Name, a.Expr, type);
+      return type;
    }
    
    NExpr AddTypeCast (Token token, NExpr source, NType target) {
@@ -73,9 +101,7 @@ public class TypeAnalyze : Visitor<NType> {
       return Void;
    }
 
-   public override NType Visit (NReadStmt r) {
-      throw new NotImplementedException ();
-   }
+   public override NType Visit (NReadStmt r) => Void;
 
    public override NType Visit (NWhileStmt w) {
       w.Condition.Accept (this); w.Body.Accept (this);
@@ -88,7 +114,9 @@ public class TypeAnalyze : Visitor<NType> {
    }
 
    public override NType Visit (NCallStmt c) {
-      throw new NotImplementedException ();
+      if (mSymbols.Find (c.Name.Text) is not NFnDecl)
+         throw new ParseException (c.Name, "Unknown fucntion");
+      Visit (c.Params); return Void;
    }
    #endregion
 
@@ -133,14 +161,13 @@ public class TypeAnalyze : Visitor<NType> {
       return bin.Type;
    }
 
-   public override NType Visit (NIdentifier d) {
-      if (mSymbols.Find (d.Name.Text) is NVarDecl v) 
-         return d.Type = v.Type;
-      throw new ParseException (d.Name, "Unknown variable");
-   }
+   public override NType Visit (NIdentifier d)
+      => d.Type = FindVariable (d.Name);
 
    public override NType Visit (NFnCall f) {
-      throw new NotImplementedException ();
+      Visit (f.Params);
+      if (mSymbols.Find (f.Name.Text) is NFnDecl fn) return f.Type = fn.Return;
+      throw new ParseException (f.Name, "Unknown function");
    }
 
    public override NType Visit (NTypeCast c) {
@@ -150,6 +177,6 @@ public class TypeAnalyze : Visitor<NType> {
 
    NType Visit (IEnumerable<Node> nodes) {
       foreach (var node in nodes) node.Accept (this);
-      return NType.Void;
+      return Void;
    }
 }
