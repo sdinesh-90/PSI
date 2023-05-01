@@ -12,11 +12,10 @@ public class TypeAnalyze : Visitor<NType> {
    SymTable mSymbols;
 
    #region Declarations ------------------------------------
-   public override NType Visit (NProgram p) 
-      => Visit (p.Block);
+   public override NType Visit (NProgram p) => VisitBlock (p, p.Block);
    
    public override NType Visit (NBlock b) {
-      mSymbols = new SymTable { Parent = mSymbols };
+      mSymbols = new SymTable { Parent = mSymbols, Source = mSource };
       Visit (b.Declarations); Visit (b.Body);
       mSymbols = mSymbols.Parent;
       return Void;
@@ -41,7 +40,7 @@ public class TypeAnalyze : Visitor<NType> {
    public override NType Visit (NFnDecl f) {
       Check (f.Name);
       mSymbols.Funcs.Add (f);
-      if (f.Body != null) Visit (f.Body);
+      if (f.Body != null) VisitBlock (f, f.Body);
       return f.Return;
    }
    #endregion
@@ -55,8 +54,8 @@ public class TypeAnalyze : Visitor<NType> {
    NType FindVariable (Token name) => mSymbols.Find (name.Text) switch {
       NVarDecl v when v.Assigned => v.Type,
       NConstDecl c => c.Type,
-      NVarDecl => throw new ParseException (name, "Use of unassigned variable"),
-      _ => throw new ParseException (name, "Unknown variable")
+      NVarDecl => throw new ParseException (name, UnAssignedError),
+      _ => throw new ParseException (name, UnKnownVariable)
    };
 
    void VisitParameters (Token fnName, NExpr[] parameters, NType[] paramTypes) {
@@ -68,6 +67,13 @@ public class TypeAnalyze : Visitor<NType> {
          parameters[i] = AddTypeCast (fnName, param, paramTypes[i]);
       }
    }
+
+   NType VisitBlock (Node source, NBlock block) {
+      (mPrevSource, mSource) = (mSource, source);
+      var type = Visit (block);
+      mSource = mPrevSource;
+      return type;
+   }
    #endregion
 
    #region Statements --------------------------------------
@@ -75,12 +81,14 @@ public class TypeAnalyze : Visitor<NType> {
       => Visit (b.Stmts);
 
    public override NType Visit (NAssignStmt a) {
-      if (mSymbols.Find (a.Name.Text) is not NVarDecl v)
-         throw new ParseException (a.Name, "Unknown variable");
+      NType type;
+      if (mSymbols.Find (a.Name.Text) is NVarDecl v) { type = v.Type; v.Assigned = true; }
+      else if (mSymbols.Source is NFnDecl fn && fn.Name.Text.EqualsIC (a.Name.Text)) {
+         type = fn.Return; fn.Assigned = true;
+      } else throw new ParseException (a.Name, UnKnownVariable);
       a.Expr.Accept (this);
-      a.Expr = AddTypeCast (a.Name, a.Expr, v.Type);
-      v.Assigned = true;
-      return v.Type;
+      a.Expr = AddTypeCast (a.Name, a.Expr, type);
+      return type;
    }
    
    NExpr AddTypeCast (Token token, NExpr source, NType target) {
@@ -121,7 +129,8 @@ public class TypeAnalyze : Visitor<NType> {
 
    public override NType Visit (NCallStmt c) {
       if (mSymbols.Find (c.Name.Text) is not NFnDecl fn)
-         throw new ParseException (c.Name, "Unknown function");
+         throw new ParseException (c.Name, UnKnownFunction);
+      if (fn.Return != Void && !fn.Assigned) throw new ParseException (c.Name, UnAssignedError);
       VisitParameters (c.Name, c.Params, fn.Params.Select (a => a.Type).ToArray ());
       return Void;
    }
@@ -172,7 +181,9 @@ public class TypeAnalyze : Visitor<NType> {
       => d.Type = FindVariable (d.Name);
 
    public override NType Visit (NFnCall f) {
-      if (mSymbols.Find (f.Name.Text) is not NFnDecl fn) throw new ParseException (f.Name, "Unknown function");
+      if (mSymbols.Find (f.Name.Text) is not NFnDecl fn)
+         throw new ParseException (f.Name, UnKnownFunction);
+      if (!fn.Assigned) throw new ParseException (f.Name, UnAssignedError);
       VisitParameters (f.Name, f.Params, fn.Params.Select (a => a.Type).ToArray ());
       return f.Type = fn.Return;
    }
@@ -186,4 +197,7 @@ public class TypeAnalyze : Visitor<NType> {
       foreach (var node in nodes) node.Accept (this);
       return Void;
    }
+   Node? mSource, mPrevSource;
+   const string UnAssignedError = "Use of unassigned variable";
+   const string UnKnownVariable = "Unknown variable", UnKnownFunction = "Unknown function";
 }

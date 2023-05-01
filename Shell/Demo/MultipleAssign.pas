@@ -9,11 +9,13 @@ function func1 (scale: real ) : real;
     pi : real;
     begin
     pi := i;
-    writeln (pi)
+    writeln (pi);
+    func1 := pi
     end;
 begin
   writeln ("Hello World");
   j := 3.1;
   writeln (j);
-  writeln (func1 (i))
+  writeln (func1 (i));
+  func1 (j)
 end.

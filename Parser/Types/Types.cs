@@ -13,6 +13,7 @@ public class SymTable {
    public List<NFnDecl> Funcs = new ();
    public List<NConstDecl> Consts = new ();
    public SymTable? Parent;
+   public Node? Source;
 
    public Node? Find (string name, bool considerParent = true) {
       var node1 = Vars.FirstOrDefault (a => a.Name.Text.EqualsIC (name));
