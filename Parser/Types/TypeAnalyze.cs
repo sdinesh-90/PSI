@@ -69,10 +69,8 @@ public class TypeAnalyze : Visitor<NType> {
    }
 
    NType VisitBlock (Node source, NBlock block) {
-      (mPrevSource, mSource) = (mSource, source);
-      var type = Visit (block);
-      mSource = mPrevSource;
-      return type;
+      mSource = source;
+      return Visit (block);
    }
    #endregion
 
@@ -197,7 +195,7 @@ public class TypeAnalyze : Visitor<NType> {
       foreach (var node in nodes) node.Accept (this);
       return Void;
    }
-   Node? mSource, mPrevSource;
+   Node? mSource;
    const string UnAssignedError = "Use of unassigned variable";
    const string UnKnownVariable = "Unknown variable", UnKnownFunction = "Unknown function";
 }
