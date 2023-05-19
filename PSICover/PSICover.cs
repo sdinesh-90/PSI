@@ -172,7 +172,7 @@ class Analyzer {
                int endCol = block.ECol;
                if (i != block.ELine)
                   endCol = code[i].Length - code[i].Reverse ().TakeWhile (char.IsWhiteSpace).Count ();
-               code[i] = code[i].Insert (endCol, "</span>");
+               code[i] = code[i].Insert (endCol, $"<span class=\"tooltiptext\">Hits: {hits[block.Id]}</span></span>");
             }
             for (int i = block.ELine; i >= block.SLine; i--) {
                int startCol = block.SCol;
@@ -185,7 +185,26 @@ class Analyzer {
 
          string html = $$"""
             <html><head><style>
-            .hit { background-color:aqua; }
+            .hit {
+               background-color:aqua;
+               position: relative;
+               display: inline-block;
+            }
+            .hit .tooltiptext {
+               visibility: hidden;
+               width: 100px;
+               background-color: black;
+               color: #fff;
+               text-align: center;
+               padding: 5px 0;
+               border-radius: 4px;
+               position: absolute;
+               z-index: 1;
+            }
+
+            .hit:hover .tooltiptext {
+              visibility: visible;
+            }
             .unhit { background-color:orange; }
             </style></head>
             <body><pre>
