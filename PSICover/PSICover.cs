@@ -168,8 +168,17 @@ class Analyzer {
          foreach (var block in blocks) {
             bool hit = hits[block.Id] > 0;
             string tag = $"<span class=\"{(hit ? "hit" : "unhit")}\">";
-            code[block.ELine] = code[block.ELine].Insert (block.ECol, "</span>");
-            code[block.SLine] = code[block.SLine].Insert (block.SCol, tag);
+            for (int i = block.ELine; i >= block.SLine; i--) {
+               int endCol = block.ECol;
+               if (i != block.ELine)
+                  endCol = code[i].Length - code[i].Reverse ().TakeWhile (char.IsWhiteSpace).Count ();
+               code[i] = code[i].Insert (endCol, "</span>");
+            }
+            for (int i = block.ELine; i >= block.SLine; i--) {
+               int startCol = block.SCol;
+               if (i != block.SLine) startCol = code[i].TakeWhile (char.IsWhiteSpace).Count ();
+               code[i] = code[i].Insert (startCol, tag);
+            }
             if (hit) hitCnt++;
          }
          string htmlfile = $"{Dir}/HTML/{Path.GetFileNameWithoutExtension (file)}.html";
