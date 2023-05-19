@@ -150,6 +150,7 @@ class Analyzer {
    void GenerateOutputs () {
       ulong[] hits = File.ReadAllLines ($"{Dir}/hits.txt").Select (ulong.Parse).ToArray ();
       var files = mBlocks.Select (a => a.File).Distinct ().ToArray ();
+      var data = new List<(string, int, int, string)> ();
       foreach (var file in files) {
          var blocks = mBlocks.Where (a => a.File == file)
                              .OrderBy (a => a.SPosition)
@@ -163,11 +164,13 @@ class Analyzer {
          var code = File.ReadAllLines (file);
          for (int i = 0; i < code.Length; i++)
             code[i] = code[i].Replace ('<', '\u00ab').Replace ('>', '\u00bb');
+         int hitCnt = 0;
          foreach (var block in blocks) {
             bool hit = hits[block.Id] > 0;
             string tag = $"<span class=\"{(hit ? "hit" : "unhit")}\">";
             code[block.ELine] = code[block.ELine].Insert (block.ECol, "</span>");
             code[block.SLine] = code[block.SLine].Insert (block.SCol, tag);
+            if (hit) hitCnt++;
          }
          string htmlfile = $"{Dir}/HTML/{Path.GetFileNameWithoutExtension (file)}.html";
 
@@ -182,10 +185,63 @@ class Analyzer {
             """;
          html = html.Replace ("\u00ab", "&lt;").Replace ("\u00bb", "&gt;");
          File.WriteAllText (htmlfile, html);
+         data.Add ((file, hitCnt, blocks.Count, htmlfile));
       }
       int cBlocks = mBlocks.Count, cHit = hits.Count (a => a > 0);
       double percent = Math.Round (100.0 * cHit / cBlocks, 1);
+      data = data.OrderBy (a => 100.0 * a.Item2 / a.Item3).ToList ();
+      // Remove the common directory from the file names
+      int dirStartIdx = 0;
+      if (files.Length > 1) {
+         dirStartIdx = int.MaxValue;
+         string file = files[0];
+         for (int i = 0; i < files.Length; i++) {
+            string file2 = files[i];
+            for (int j = 0; j < files[0].Length; j++) {
+               if (j >= file2.Length) break;
+               if (file[j] != file2[j]) { if (dirStartIdx > j) dirStartIdx = j; break; }
+            }
+         }
+      }
+      string shtml = $$"""
+         <html><head><style>
+         table, th, td {
+           border: 1px solid black;
+           border-collapse: collapse;
+         }
+         tfoot { font-weight: bold; }
+         </style></head>
+         <body>
+         <table>
+            <tr>
+               <th>File</th>
+               <th>Hit block count</th>
+               <th>Total block count</th>
+               <th>Percentage (%)</th>
+            </tr>
+            {{string.Join ("\r\n", data.Select (GetSummaryRow))}}
+            <tfoot>
+            <tr>
+               <td>Total</td>
+               <td>{{data.Sum (a => a.Item2)}}</td>
+               <td>{{data.Sum (a => a.Item3)}}</td>
+               <td>{{percent}}</td>
+            </tr>
+            </tfoot>
+         </body><html>
+         """;
       Console.WriteLine ($"Coverage: {cHit}/{cBlocks}, {percent}%");
+      File.WriteAllText ($"{Dir}/HTML/Summary.html", shtml);
+
+      string GetSummaryRow ((string File, int HitCnt, int BlockCnt, string HTMLFile) data)
+         => $"""
+            <tr>
+               <td><a href="{data.HTMLFile}">{data.File[dirStartIdx..].Replace ("\\\\", "/")}</a></td>
+               <td>{data.HitCnt}</td>
+               <td>{data.BlockCnt}</td>
+               <td>{Math.Round (100.0 * data.HitCnt / data.BlockCnt, 1)}
+            </tr>
+            """;
    }
 
    // Restore the DLLs and PDBs from the backups
