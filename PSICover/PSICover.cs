@@ -150,7 +150,7 @@ class Analyzer {
    void GenerateOutputs () {
       ulong[] hits = File.ReadAllLines ($"{Dir}/hits.txt").Select (ulong.Parse).ToArray ();
       var files = mBlocks.Select (a => a.File).Distinct ().ToArray ();
-      var data = new List<(string, int, int, string)> ();
+      var data = new List<(string File, int Hit, int Total, string HTML)> ();
       foreach (var file in files) {
          var blocks = mBlocks.Where (a => a.File == file)
                              .OrderBy (a => a.SPosition)
@@ -164,22 +164,20 @@ class Analyzer {
          var code = File.ReadAllLines (file);
          for (int i = 0; i < code.Length; i++)
             code[i] = code[i].Replace ('<', '\u00ab').Replace ('>', '\u00bb');
-         int hitCnt = 0;
+         int cHits = 0;
          foreach (var block in blocks) {
             bool hit = hits[block.Id] > 0;
-            string tag = $"<span class=\"{(hit ? "hit" : "unhit")}\">";
+            string startTag = "<span class=\"hit\">";
+            string endTag = "<span class=\"tooltiptext\">Hits: {0}</span></span>";
+            if (!hit) (startTag, endTag) = ("<span class=\"unhit\">", "</span>");
             for (int i = block.ELine; i >= block.SLine; i--) {
-               int endCol = block.ECol;
-               if (i != block.ELine)
-                  endCol = code[i].Length - code[i].Reverse ().TakeWhile (char.IsWhiteSpace).Count ();
-               code[i] = code[i].Insert (endCol, $"<span class=\"tooltiptext\">Hits: {hits[block.Id]}</span></span>");
-            }
-            for (int i = block.ELine; i >= block.SLine; i--) {
-               int startCol = block.SCol;
+               int startCol = block.SCol, endCol = block.ECol;
+               if (i != block.ELine) endCol = code[i].Length - code[i].Reverse ().TakeWhile (char.IsWhiteSpace).Count ();
                if (i != block.SLine) startCol = code[i].TakeWhile (char.IsWhiteSpace).Count ();
-               code[i] = code[i].Insert (startCol, tag);
+               code[i] = code[i].Insert (endCol, string.Format (endTag, hits[block.Id]));
+               code[i] = code[i].Insert (startCol, startTag);
             }
-            if (hit) hitCnt++;
+            if (hit) cHits++;
          }
          string htmlfile = $"{Dir}/HTML/{Path.GetFileNameWithoutExtension (file)}.html";
 
@@ -213,11 +211,11 @@ class Analyzer {
             """;
          html = html.Replace ("\u00ab", "&lt;").Replace ("\u00bb", "&gt;");
          File.WriteAllText (htmlfile, html);
-         data.Add ((file, hitCnt, blocks.Count, htmlfile));
+         data.Add ((file, cHits, blocks.Count, htmlfile));
       }
       int cBlocks = mBlocks.Count, cHit = hits.Count (a => a > 0);
       double percent = Math.Round (100.0 * cHit / cBlocks, 1);
-      data = data.OrderBy (a => 100.0 * a.Item2 / a.Item3).ToList ();
+      data = data.OrderBy (a => 100.0 * a.Hit / a.Total).ToList ();
       // Remove the common directory from the file names
       int dirStartIdx = 0;
       if (files.Length > 1) {
@@ -251,8 +249,8 @@ class Analyzer {
             <tfoot>
             <tr>
                <td>Total</td>
-               <td>{{data.Sum (a => a.Item2)}}</td>
-               <td>{{data.Sum (a => a.Item3)}}</td>
+               <td>{{data.Sum (a => a.Hit)}}</td>
+               <td>{{data.Sum (a => a.Total)}}</td>
                <td>{{percent}}</td>
             </tr>
             </tfoot>
