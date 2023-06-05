@@ -3,3 +3,5 @@ TData/tmpfile.txt
 **/bin/
 **/obj/
 *.bak
+PSIOutput.dll
+PSIOutput.il

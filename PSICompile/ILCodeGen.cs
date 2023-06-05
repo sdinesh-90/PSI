@@ -24,6 +24,9 @@ public class ILCodeGen : Visitor {
       Out ("    ret");
       Out ("  }");
       Out ("}");
+      // Finally add the labels
+      foreach (var (idx, label) in mInserts.OrderByDescending (a => a.Idx))
+         S.Insert (idx, label);
    }
    SymTable mSymbols = SymTable.Root;
 
@@ -59,6 +62,13 @@ public class ILCodeGen : Visitor {
       else Out ($"    stsfld {type} Program::{vd.Name}");
    }
 
+   void LoadVar (Token name) {
+      var vd = (NVarDecl)mSymbols.Find (name)!;
+      var type = TMap[vd.Type];
+      if (vd.Local) Out ($"    ldloc {vd.Name}");
+      else Out ($"    ldsfld {type} Program::{vd.Name}");
+   }
+
    public override void Visit (NWriteStmt w) {
       foreach (var e in w.Exprs) {
          e.Accept (this);
@@ -67,8 +77,38 @@ public class ILCodeGen : Visitor {
       if (w.NewLine) Out ("    call void [System.Console]System.Console::WriteLine ()");
    }
    
-   public override void Visit (NIfStmt f) => throw new NotImplementedException ();
-   public override void Visit (NForStmt f) => throw new NotImplementedException ();
+   public override void Visit (NIfStmt f) {
+      f.Condition.Accept (this);
+      Out ($"    brfalse ");
+      int labelIdx = mIdx - 1;
+      f.IfPart.Accept (this);
+      if (f.ElsePart != null) {
+         string lab1 = NextLabel ();
+         OutLabel (lab1);
+         mInserts.Add ((labelIdx, lab1));
+         f.ElsePart.Accept (this);
+      } else {
+         string lab2 = NextLabel ();
+         mInserts.Add ((labelIdx, lab2));
+         OutLabel (lab2);
+      }
+   }
+
+   public override void Visit (NForStmt f) {
+      f.Start.Accept (this);
+      StoreVar (f.Var);
+      string lab1 = NextLabel ();
+      OutLabel (lab1);
+      f.Body.Accept (this);
+      LoadVar (f.Var);
+      Out ($"    ldc.i4.1\n    {(f.Ascending ? "add" : "sub")}");
+      StoreVar (f.Var);
+      LoadVar (f.Var);
+      f.End.Accept (this);
+      Out ($"    {OpCode (f.Ascending ? Token.E.GT : Token.E.LT)}");
+      Out ($"    brfalse {lab1}");
+   }
+
    public override void Visit (NReadStmt r) => throw new NotImplementedException ();
 
    public override void Visit (NWhileStmt w) {
@@ -121,7 +161,7 @@ public class ILCodeGen : Visitor {
    public override void Visit (NUnary u) {
       u.Expr.Accept (this);
       string op = u.Op.Kind.ToString ().ToLower ();
-      op = op switch { "sub" => "neg", _ => op };
+      op = op switch { "sub" => "neg", "not" => "ldc.i4.0\n    ceq", _ => op };
       Out ($"    {op}");
    }
 
@@ -129,13 +169,23 @@ public class ILCodeGen : Visitor {
       b.Left.Accept (this); b.Right.Accept (this);
       if (b.Left.Type == NType.String) 
          Out ("    call string [System.Runtime]System.String::Concat (string, string)");
-      else {
-         string op = b.Op.Kind.ToString ().ToLower ();
-         op = op switch { "mod" => "rem", "eq" => "ceq", "lt" => "clt", _ => op };
-         Out ($"    {op}");
-      }
+      else  Out ($"    {OpCode (b.Op.Kind)}");
    }
-   
+
+   string OpCode (Token.E opKind) {
+      string op = opKind.ToString ().ToLower ();
+      return op switch {
+         "mod" => "rem",
+         "eq" => "ceq",
+         "lt" => "clt",
+         "gt" => "cgt",
+         "leq" => "cgt\n    ldc.i4.0\n    ceq",
+         "neq" => "ceq\n    ldc.i4.0\n    ceq",
+         "geq" => "clt\n    ldc.i4.0\n    ceq",
+         _ => op
+      };
+   }
+
    public override void Visit (NFnCall f) => throw new NotImplementedException ();
 
    public override void Visit (NTypeCast t) {
@@ -149,10 +199,24 @@ public class ILCodeGen : Visitor {
 
    // Helpers ......................................
    // Append a line to output (followed by a \n newline)
-   void Out (string s) => S.Append (s).Append ('\n');
+   void Out (string s) {
+      S.Append (s).Append ('\n');
+      mIdx += s.Length + 1;
+   }
 
    // Append text to output (continuing on the same line)
-   void OutC (string s) => S.Append (s);
+   void OutC (string s) {
+      S.Append (s);
+      mIdx += s.Length;
+   }
+
+   void OutLabel (string lb) {
+      string s = $"   {lb}:";
+      S.Append (s);
+      mIdx += s.Length;
+   }
+   int mIdx = 0;
+   List<(int Idx, string Label)> mInserts = new ();
 
    // Call Accept on a sequence of nodes
    void Visit (IEnumerable<Node> nodes) {
