@@ -24,9 +24,6 @@ public class ILCodeGen : Visitor {
       Out ("    ret");
       Out ("  }");
       Out ("}");
-      // Finally add the labels
-      foreach (var (idx, label) in mInserts.OrderByDescending (a => a.Idx))
-         S.Insert (idx, label);
    }
    SymTable mSymbols = SymTable.Root;
 
@@ -79,19 +76,13 @@ public class ILCodeGen : Visitor {
    
    public override void Visit (NIfStmt f) {
       f.Condition.Accept (this);
-      Out ($"    brfalse ");
-      int labelIdx = mIdx - 1;
+      string lab1 = NextLabel ();
+      Out ($"    brfalse {lab1}");
       f.IfPart.Accept (this);
       if (f.ElsePart != null) {
-         string lab1 = NextLabel ();
          OutLabel (lab1);
-         mInserts.Add ((labelIdx, lab1));
          f.ElsePart.Accept (this);
-      } else {
-         string lab2 = NextLabel ();
-         mInserts.Add ((labelIdx, lab2));
-         OutLabel (lab2);
-      }
+      } else OutLabel (lab1);
    }
 
    public override void Visit (NForStmt f) {
@@ -199,24 +190,12 @@ public class ILCodeGen : Visitor {
 
    // Helpers ......................................
    // Append a line to output (followed by a \n newline)
-   void Out (string s) {
-      S.Append (s).Append ('\n');
-      mIdx += s.Length + 1;
-   }
+   void Out (string s) => S.Append (s).Append ('\n');
 
    // Append text to output (continuing on the same line)
-   void OutC (string s) {
-      S.Append (s);
-      mIdx += s.Length;
-   }
+   void OutC (string s) => S.Append (s);
 
-   void OutLabel (string lb) {
-      string s = $"   {lb}:";
-      S.Append (s);
-      mIdx += s.Length;
-   }
-   int mIdx = 0;
-   List<(int Idx, string Label)> mInserts = new ();
+   void OutLabel (string lb) => S.Append ($"   {lb}:");
 
    // Call Accept on a sequence of nodes
    void Visit (IEnumerable<Node> nodes) {
