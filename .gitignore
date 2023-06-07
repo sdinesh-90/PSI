@@ -3,3 +3,4 @@ TData/tmpfile.txt
 **/bin/
 **/obj/
 *.bak
+*.orig
